@@ -1,7 +1,13 @@
+from rest_framework.views import APIView
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from .permissions import IsRestaurante, IsEntregador
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework_simplejwt.tokens import RefreshToken
+from google.oauth2 import id_token
+from google.auth.transport import requests
+from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
 from .models import (
     Usuario, PerfilUsuario, Restaurante, CategoriaProduto, Produto,
@@ -21,10 +27,67 @@ from .serializers import (
 # -----------------------------
 # USUÁRIOS
 # -----------------------------
+
+class GoogleLoginView(APIView):
+    """
+    Endpoint para login/cadastro via conta Google.
+    Frontend deve enviar o id_token do Google.
+    """
+    def post(self, request):
+        token = request.data.get("id_token")
+
+        if not token:
+            return Response({"erro": "Token Google ausente."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # valida o token
+            info = id_token.verify_oauth2_token(token, requests.Request(), settings.GOOGLE_CLIENT_ID)
+
+            email = info.get("email")
+            nome = info.get("name", "")
+            foto_url = info.get("picture", "")
+
+            if not email:
+                return Response({"erro": "Token inválido: sem email."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # busca ou cria o usuário
+            usuario, criado = Usuario.objects.get_or_create(
+                email=email,
+                defaults={
+                    "username": email.split("@")[0],
+                    "first_name": nome,
+                    "foto": foto_url,  # opcional: pode salvar a URL da foto do Google
+                    "ativo": True,
+                },
+            )
+
+            # cria perfil cliente se for novo
+            if criado:
+                PerfilUsuario.objects.create(usuario=usuario, tipo="cliente")
+
+            # gera tokens JWT
+            refresh = RefreshToken.for_user(usuario)
+
+            return Response({
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+                "usuario": {
+                    "id": usuario.id,
+                    "username": usuario.username,
+                    "email": usuario.email,
+                    "foto": usuario.foto.url if usuario.foto else None,
+                }
+            })
+
+        except ValueError:
+            return Response({"erro": "Token Google inválido."}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class UsuarioViewSet(viewsets.ModelViewSet):
     queryset = Usuario.objects.all()
     serializer_class = UsuarioSerializer
     permission_classes = [permissions.AllowAny]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     @action(detail=False, methods=['post'], url_path='registrar')
     def registrar(self, request):
@@ -34,6 +97,41 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response({'mensagem': 'Usuário cliente criado com sucesso!'}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['patch'], url_path='foto', url_name='atualizar_foto')
+    def atualizar_foto(self, request, pk=None):
+        """Atualiza apenas a foto do usuário"""
+        usuario = self.get_object()
+        
+        # verifica se o campo foto foi enviado
+        if 'foto' not in request.data:
+            return Response(
+                {'erro': 'O campo "foto" é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        usuario.foto = request.data['foto']
+        usuario.save()
+        serializer = self.get_serializer(usuario)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['delete'], permission_classes=[IsAuthenticated])
+    def remover_foto(self, request, pk=None):
+        """Remove a foto de perfil do usuário (define como None)."""
+        usuario = self.get_object()
+
+        # só o próprio usuário ou admin pode remover
+        if request.user != usuario and not request.user.is_staff:
+            return Response({'erro': 'Permissão negada.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # exclui o arquivo físico, se existir
+        if usuario.foto:
+            usuario.foto.delete(save=False)
+
+        usuario.foto = None
+        usuario.save()
+
+        return Response({'mensagem': 'Foto de perfil removida com sucesso.'}, status=status.HTTP_200_OK)
 
 # -----------------------------
 # RESTAURANTES E PRODUTOS

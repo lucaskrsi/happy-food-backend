@@ -1,5 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import BaseUserManager, AbstractUser, Group, Permission
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
+import os
 
 
 # -----------------------------
@@ -13,6 +16,8 @@ class UsuarioManager(BaseUserManager):
             raise ValueError("O campo username é obrigatório")
         email = self.normalize_email(email)
         user = self.model(username=username, email=email, **extra_fields)
+        if 'foto' in extra_fields:
+            user.foto = extra_fields['foto']
         user.set_password(password)
         user.save(using=self._db)
         return user
@@ -23,15 +28,19 @@ class UsuarioManager(BaseUserManager):
         return self.create_user(username, email, password, **extra_fields)
 
 
+
 class Usuario(AbstractUser):
     telefone = models.CharField(max_length=20, blank=True, null=True)
     data_cadastro = models.DateTimeField(auto_now_add=True)
     ativo = models.BooleanField(default=True)
-    foto = models.ImageField(upload_to="usuarios/", null=True, blank=True)
+    foto = models.ImageField(upload_to="usuarios/fotos/", null=True, blank=True)
+    foto_url = models.URLField(blank=True, null=True)
+    is_staff = models.BooleanField(default=False)
     related_name = "usuarios"
     groups = models.ManyToManyField(
         Group, related_name="usuario_set", blank=True
     )
+    
     user_permissions = models.ManyToManyField(
         Permission,
         related_name="usuario_permissions_set",
@@ -39,10 +48,26 @@ class Usuario(AbstractUser):
     )
 
     objects = UsuarioManager()
-
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = ['email']
+    
     def __str__(self):
         return self.username or self.email
 
+@receiver(pre_save, sender=Usuario)
+def apagar_foto_antiga(sender, instance, **kwargs):
+    if not instance.pk:
+        return False
+
+    try:
+        foto_antiga = Usuario.objects.get(pk=instance.pk).foto
+    except Usuario.DoesNotExist:
+        return False
+
+    nova_foto = instance.foto
+    if foto_antiga and foto_antiga != nova_foto:
+        if os.path.isfile(foto_antiga.path):
+            os.remove(foto_antiga.path)
 
 class PerfilUsuario(models.Model):
     TIPO_CHOICES = [

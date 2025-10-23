@@ -24,6 +24,11 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 
 # Application definition
 
@@ -35,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'food',
 ]
@@ -128,7 +134,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),

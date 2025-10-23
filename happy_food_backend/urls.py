@@ -7,6 +7,8 @@ from rest_framework_simplejwt.views import (
 )
 from food.view_auth import CustomTokenObtainPairView
 from food.view_logout import LogoutView
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -16,3 +18,6 @@ urlpatterns = [
     path("auth/token/verify/", TokenVerifyView.as_view(), name="token_verify"),
     path("api/logout/", LogoutView.as_view(), name="auth_logout"),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
