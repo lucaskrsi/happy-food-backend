@@ -103,7 +103,6 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         """Atualiza apenas a foto do usuário"""
         usuario = self.get_object()
         
-        # verifica se o campo foto foi enviado
         if 'foto' not in request.data:
             return Response(
                 {'erro': 'O campo "foto" é obrigatório.'},
@@ -120,11 +119,9 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         """Remove a foto de perfil do usuário (define como None)."""
         usuario = self.get_object()
 
-        # só o próprio usuário ou admin pode remover
         if request.user != usuario and not request.user.is_staff:
             return Response({'erro': 'Permissão negada.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # exclui o arquivo físico, se existir
         if usuario.foto:
             usuario.foto.delete(save=False)
 

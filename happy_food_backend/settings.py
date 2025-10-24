@@ -89,20 +89,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'happy_food_backend.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.postgresql",
-#         "OPTIONS": {
-#             "service": "my_service",
-#             "passfile": ".my_pgpass",
-#         },
-#     }
-# }
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -140,12 +126,10 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,   # precisa de token_blacklist app
+    'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),
-    # 'USER_ID_FIELD': 'id', # padrão
-    # 'USER_ID_CLAIM': 'user_id',
 }
 
 # Internationalization

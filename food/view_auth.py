@@ -9,7 +9,6 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['email'] = user.email
         token['username'] = user.username
 
-        # Se você tem Perfis (PerfilUsuario) e quer mandar roles:
         roles = list(user.perfis.values_list('tipo', flat=True))
         token['roles'] = roles
 

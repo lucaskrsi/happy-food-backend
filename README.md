@@ -1,6 +1,6 @@
 # 🍔 HappyFood API — Backend Django REST
 
-Plataforma de delivery semelhante ao iFood, com suporte a múltiplos tipos de usuários (cliente, restaurante, entregador e administrador), carrinho, pedidos, pagamentos, avaliações e rastreamento de entrega em tempo real por geolocalização.
+Plataforma de delivery, com suporte a múltiplos tipos de usuários (cliente, restaurante, entregador e administrador), carrinho, pedidos, pagamentos, avaliações e rastreamento de entrega em tempo real por geolocalização.
 
 ---
 
@@ -21,8 +21,8 @@ Plataforma de delivery semelhante ao iFood, com suporte a múltiplos tipos de us
 ### 1️⃣ Clone o repositório
 
 ```bash
-git clone https://github.com/lucaskrsi/happyfood-backend.git
-cd happyfood-backend
+git clone https://github.com/lucaskrsi/happy-food-backend.git
+cd happy-food-backend
 ```
 
 ### 2️⃣ Crie e ative o ambiente virtual
@@ -266,5 +266,5 @@ happy_food_backend/
 
 **Lucas Silva**  
 Desenvolvedor Fullstack  
-💼 Portfólio: [seusite.com](#)  
-📧 Contato: [lucas.silva.code@outlook.com.br](#)
+💼 Linkedin: linkedin.com/in/lucas-pereira-da-silva/  
+📧 Contato: lucas.silva.code@outlook.com.br
