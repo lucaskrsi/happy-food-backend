@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import (
-    Usuario, PerfilUsuario, Restaurante, CategoriaProduto, Produto,
+    Usuario, Restaurante, CategoriaProduto, Produto,
     Carrinho, ItemCarrinho, Pedido, ItemPedido, Pagamento,
     Entrega, RastreamentoEntrega,
     AvaliacaoRestaurante, AvaliacaoEntregador, AvaliacaoProduto
@@ -9,19 +9,12 @@ from .models import (
 # -----------------------------
 # USUÁRIOS E PERFIS
 # -----------------------------
-class PerfilUsuarioSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PerfilUsuario
-        fields = ['id', 'tipo']
-
-
 class UsuarioSerializer(serializers.ModelSerializer):
-    perfis = PerfilUsuarioSerializer(many=True, read_only=True)
     password = serializers.CharField(write_only=True)
 
     class Meta:
         model = Usuario
-        fields = ['id', 'username', 'email', 'telefone', 'foto', 'password', 'perfis']
+        fields = ['id', 'username', 'email', 'telefone', 'foto', 'password', 'perfil']
 
     def create(self, validated_data):
         foto = validated_data.pop('foto', None)
@@ -34,7 +27,6 @@ class UsuarioSerializer(serializers.ModelSerializer):
             usuario.set_password(password)
             usuario.save()
 
-        PerfilUsuario.objects.create(usuario=usuario, tipo="cliente")
         return usuario
 
 # -----------------------------

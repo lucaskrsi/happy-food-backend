@@ -114,7 +114,7 @@ Após criar o usuário, envie:
 
 ### ✅ 3. Login tradicional
 
-**Endpoint:** `POST /auth/login/`
+**Endpoint:** `POST /auth/token/`
 
 ```json
 {
@@ -237,14 +237,18 @@ Depois do login, o `Usuario` é criado automaticamente e o sinal cria o `PerfilU
 ```
 happy_food_backend/
 ├── food/
+│   ├── admin.py
+│   ├── apps.py
 │   ├── models.py
-│   ├── serializers.py
-│   ├── views.py
-│   ├── signals.py
 │   ├── permissions.py
+│   ├── serializers.py
+│   ├── tests.py
 │   ├── urls.py
-│   └── apps.py
+│   ├── view_auth.py
+│   ├── view_logout.py
+│   └── views.py
 ├── happy_food_backend/
+│   ├── asgi.py
 │   ├── settings.py
 │   ├── urls.py
 │   └── wsgi.py

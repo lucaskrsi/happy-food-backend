@@ -36,6 +36,13 @@ class Usuario(AbstractUser):
     foto = models.ImageField(upload_to="usuarios/fotos/", null=True, blank=True)
     foto_url = models.URLField(blank=True, null=True)
     is_staff = models.BooleanField(default=False)
+    TIPO_CHOICES = [
+        ("cliente", "Cliente"),
+        ("restaurante", "Restaurante"),
+        ("entregador", "Entregador"),
+        ("suporte", "Suporte"),
+    ]
+    perfil = models.CharField(max_length=20, choices=TIPO_CHOICES, default="cliente")
     related_name = "usuarios"
     groups = models.ManyToManyField(
         Group, related_name="usuario_set", blank=True
@@ -69,28 +76,11 @@ def apagar_foto_antiga(sender, instance, **kwargs):
         if os.path.isfile(foto_antiga.path):
             os.remove(foto_antiga.path)
 
-class PerfilUsuario(models.Model):
-    TIPO_CHOICES = [
-        ("cliente", "Cliente"),
-        ("restaurante", "Restaurante"),
-        ("entregador", "Entregador"),
-        ("admin", "Administrador"),
-    ]
-
-    usuario = models.ForeignKey(
-        Usuario, on_delete=models.CASCADE, related_name="perfis"
-    )
-    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
-
-    def __str__(self):
-        return f"{self.usuario.username} - {self.tipo}"
-
-
 # -----------------------------
 # RESTAURANTES E CARDÁPIO
 # -----------------------------
 class Restaurante(models.Model):
-    dono = models.ForeignKey(
+    dono = models.OneToOneField(
         Usuario, on_delete=models.CASCADE, related_name="restaurantes"
     )
     nome = models.CharField(max_length=100)
@@ -230,7 +220,7 @@ class Entrega(models.Model):
     pedido = models.OneToOneField(
         Pedido, on_delete=models.CASCADE, related_name="entrega"
     )
-    entregador = models.ForeignKey(
+    entregador = models.OneToOneField(
         Usuario, on_delete=models.SET_NULL, null=True, related_name="entregas"
     )
     status = models.CharField(

@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from .permissions import IsRestaurante, IsEntregador
+from .permissions import IsAdminOrReadOnly, IsRestaurante, IsEntregador
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from google.oauth2 import id_token
@@ -10,13 +10,13 @@ from google.auth.transport import requests
 from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
 from .models import (
-    Usuario, PerfilUsuario, Restaurante, CategoriaProduto, Produto,
+    Usuario, Restaurante, CategoriaProduto, Produto,
     Carrinho, ItemCarrinho, Pedido, ItemPedido, Pagamento,
     Entrega, RastreamentoEntrega,
     AvaliacaoRestaurante, AvaliacaoEntregador, AvaliacaoProduto
 )
 from .serializers import (
-    UsuarioSerializer, PerfilUsuarioSerializer, RestauranteSerializer,
+    UsuarioSerializer, RestauranteSerializer,
     CategoriaProdutoSerializer, ProdutoSerializer,
     CarrinhoSerializer, ItemCarrinhoSerializer,
     PedidoSerializer, ItemPedidoSerializer, PagamentoSerializer,
@@ -61,10 +61,6 @@ class GoogleLoginView(APIView):
                 },
             )
 
-            # cria perfil cliente se for novo
-            if criado:
-                PerfilUsuario.objects.create(usuario=usuario, tipo="cliente")
-
             # gera tokens JWT
             refresh = RefreshToken.for_user(usuario)
 
@@ -82,22 +78,39 @@ class GoogleLoginView(APIView):
         except ValueError:
             return Response({"erro": "Token Google inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
-
 class UsuarioViewSet(viewsets.ModelViewSet):
     queryset = Usuario.objects.all()
     serializer_class = UsuarioSerializer
     permission_classes = [permissions.AllowAny]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
+    def get_queryset(self):
+        if self.request.user.is_staff:
+            return self.queryset
+        return self.queryset.filter(id=self.request.user.id)
+    
     @action(detail=False, methods=['post'], url_path='registrar')
     def registrar(self, request):
         """Endpoint para cadastrar novo cliente"""
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response({'mensagem': 'Usuário cliente criado com sucesso!'}, status=status.HTTP_201_CREATED)
+            return Response({'mensagem': 'Usuário criado com sucesso!'}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
+    @action(detail=True, methods=['patch'], url_path='atualizar_senha', url_name='atualizar_senha')
+    def atualizar_senha(self, request, pk=None):
+        """Atualiza a senha do usuário"""
+        usuario = self.get_object()
+        nova_senha = request.data.get("nova_senha")
+
+        if not nova_senha:
+            return Response({'erro': 'O campo "nova_senha" é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        usuario.set_password(nova_senha)
+        usuario.save()
+        return Response({'mensagem': 'Senha atualizada com sucesso.'}, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['patch'], url_path='foto', url_name='atualizar_foto')
     def atualizar_foto(self, request, pk=None):
         """Atualiza apenas a foto do usuário"""
@@ -151,6 +164,12 @@ class CategoriaProdutoViewSet(viewsets.ModelViewSet):
     queryset = CategoriaProduto.objects.all()
     serializer_class = CategoriaProdutoSerializer
     permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        # só restaurantes (ou admin) podem criar/editar produtos
+        if self.request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            return [IsAuthenticated(), IsAdminOrReadOnly()]
+        return [permissions.AllowAny(),]
 
 
 class ProdutoViewSet(viewsets.ModelViewSet):

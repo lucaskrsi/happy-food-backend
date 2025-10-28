@@ -9,9 +9,6 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['email'] = user.email
         token['username'] = user.username
 
-        roles = list(user.perfis.values_list('tipo', flat=True))
-        token['roles'] = roles
-
         return token
 
 class CustomTokenObtainPairView(TokenObtainPairView):

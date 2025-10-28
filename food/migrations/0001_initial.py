@@ -109,7 +109,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('tipo', models.CharField(choices=[('cliente', 'Cliente'), ('restaurante', 'Restaurante'), ('entregador', 'Entregador'), ('admin', 'Administrador')], max_length=20)),
-                ('usuario', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='perfis', to=settings.AUTH_USER_MODEL)),
+                ('usuario', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='perfil', to=settings.AUTH_USER_MODEL)),
             ],
         ),
         migrations.CreateModel(

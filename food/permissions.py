@@ -12,11 +12,11 @@ class IsRestaurante(permissions.BasePermission):
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-        return request.user.perfis.filter(tipo='restaurante').exists()
+        return request.user.filter(perfil='restaurante').exists()
 
 class IsEntregador(permissions.BasePermission):
     """Permite somente entregadores"""
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-        return request.user.perfis.filter(tipo='entregador').exists()
+        return request.user.filter(perfil='entregador').exists()
