@@ -1,18 +1,7 @@
-# 🍔 HappyFood API — Backend Django REST
+# 🍔 Happy Food – API Backend (Django REST Framework)
 
-Plataforma de delivery, com suporte a múltiplos tipos de usuários (cliente, restaurante, entregador e administrador), carrinho, pedidos, pagamentos, avaliações e rastreamento de entrega em tempo real por geolocalização.
-
----
-
-## 🧰 Tecnologias utilizadas
-
-- **Django 5+**
-- **Django REST Framework**
-- **dj-rest-auth** + **django-allauth** → Autenticação e login com Google
-- **PostgreSQL** (ou SQLite em desenvolvimento)
-- **JWT Tokens** para autenticação
-- **Pillow** → Upload de imagens
-- **drf-yasg** → Documentação Swagger
+API para uma plataforma de delivery com usuários, restaurantes, produtos, carrinho, pedidos, entregas e avaliações.  
+Desenvolvido com **Django** e **Django REST Framework**.
 
 ---
 
@@ -86,14 +75,14 @@ Acesse:
 
 ```json
 {
-  "username": "joao",
-  "email": "joao@email.com",
+  "username": "bruno",
+  "email": "bruno@email.com",
   "password": "123456",
-  "telefone": "11999999999"
+  "tipo": "restaurante"
 }
 ```
 
-> 🔸 Cria automaticamente um perfil `PerfilUsuario(tipo="cliente")`.
+> 🔸 Por padrão Cria automaticamente um perfil `cliente`.
 
 ---
 
@@ -106,7 +95,9 @@ Após criar o usuário, envie:
 
 ```json
 {
-  "tipo": "restaurante"
+    "nome": "Pizzaria Bucciarati",
+    "cnpj": "99.999.999/0001-99",
+    "endereco": "Rua Arrivederci, 6"
 }
 ```
 
@@ -118,7 +109,7 @@ Após criar o usuário, envie:
 
 ```json
 {
-  "username": "joao",
+  "username": "bruno",
   "password": "123456"
 }
 ```
@@ -182,7 +173,6 @@ Depois do login, o `Usuario` é criado automaticamente e o sinal cria o `PerfilU
 | `GET` | `/usuarios/{id}/` | Detalhes de um usuário |
 | `PUT` / `PATCH` | `/usuarios/{id}/` | Atualiza dados |
 | `DELETE` | `/usuarios/{id}/` | Exclui usuário |
-| `POST` | `/usuarios/definir_tipo_usuario/` | Define tipo de perfil (cliente, restaurante, entregador) |
 
 ---
 
@@ -190,7 +180,8 @@ Depois do login, o `Usuario` é criado automaticamente e o sinal cria o `PerfilU
 | Método | Rota | Descrição |
 |--------|-------|-----------|
 | `GET` | `/restaurantes/` | Lista restaurantes |
-| `POST` | `/restaurantes/` | Cadastra novo restaurante |
+| `GET` | `/restaurantes/{id}` | Detalhes de um restaurante |
+| `POST` | `/restaurantes/` | Cadastra novo restaurante (se não informado, o dono será o usuário logado) |
 | `GET` | `/restaurantes/{id}/produtos/` | Lista produtos do restaurante |
 
 ---
@@ -259,7 +250,7 @@ happy_food_backend/
 
 ## 🧩 Próximos passos
 
-- [ ] Criar dashboard admin (painel para restaurantes e entregadores)
+- [ ] Criar sistemas de cupons e descontos
 - [ ] Integrar pagamento real (ex: Stripe ou Mercado Pago)
 - [ ] Adicionar notificação em tempo real (ex: via WebSocket ou Firebase)
 - [ ] Implementar testes automatizados com `pytest`
