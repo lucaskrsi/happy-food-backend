@@ -90,7 +90,7 @@ Acesse:
 
 Após criar o usuário, envie:
 
-**Endpoint:** `POST /usuarios/definir_tipo_usuario/`  
+**Endpoint:** `POST /restaurantes/`  
 **Autenticação:** Bearer Token
 
 ```json
