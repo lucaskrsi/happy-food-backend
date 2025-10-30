@@ -3,6 +3,9 @@ from django.contrib.auth.models import BaseUserManager, AbstractUser, Group, Per
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 import os
+import uuid
+from django.db import transaction
+from django.utils import timezone
 
 
 # -----------------------------
@@ -24,12 +27,14 @@ class UsuarioManager(BaseUserManager):
 
     def create_superuser(self, username, email=None, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("perfil", 'suporte')
         extra_fields.setdefault("is_superuser", True)
         return self.create_user(username, email, password, **extra_fields)
 
 
 
 class Usuario(AbstractUser):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     telefone = models.CharField(max_length=20, blank=True, null=True)
     data_cadastro = models.DateTimeField(auto_now_add=True)
     ativo = models.BooleanField(default=True)
@@ -80,7 +85,8 @@ def apagar_foto_antiga(sender, instance, **kwargs):
 # RESTAURANTES E CARDÁPIO
 # -----------------------------
 class Restaurante(models.Model):
-    dono = models.OneToOneField(
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    dono = models.ForeignKey(
         Usuario, on_delete=models.CASCADE, related_name="restaurantes"
     )
     nome = models.CharField(max_length=100)
@@ -94,6 +100,7 @@ class Restaurante(models.Model):
 
 
 class CategoriaProduto(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     nome = models.CharField(max_length=50)
 
     def __str__(self):
@@ -101,6 +108,7 @@ class CategoriaProduto(models.Model):
 
 
 class Produto(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     restaurante = models.ForeignKey(
         Restaurante, on_delete=models.CASCADE, related_name="produtos"
     )
@@ -116,11 +124,28 @@ class Produto(models.Model):
     def __str__(self):
         return f"{self.nome} - {self.restaurante.nome}"
 
+# -----------------------------
+# OPÇÕES ADICIONAIS DO PRODUTO
+# -----------------------------
+
+class GrupoOpcao(models.Model):
+    produto = models.ForeignKey(Produto, on_delete=models.CASCADE, related_name='grupos_opcoes')
+    nome = models.CharField(max_length=100)
+    obrigatorio = models.BooleanField(default=False)
+    multipla_escolha = models.BooleanField(default=False)
+
+
+class Opcao(models.Model):
+    grupo = models.ForeignKey(GrupoOpcao, on_delete=models.CASCADE, related_name='opcoes')
+    nome = models.CharField(max_length=100)
+    preco_adicional = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+
 
 # -----------------------------
 # CARRINHO E PEDIDOS
 # -----------------------------
 class Carrinho(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     usuario = models.ForeignKey(
         Usuario, on_delete=models.CASCADE, related_name="carrinhos"
     )
@@ -131,21 +156,26 @@ class Carrinho(models.Model):
 
 
 class ItemCarrinho(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     carrinho = models.ForeignKey(
         Carrinho, on_delete=models.CASCADE, related_name="itens"
     )
     produto = models.ForeignKey(Produto, on_delete=models.CASCADE)
     quantidade = models.PositiveIntegerField(default=1)
     observacao = models.TextField(blank=True, null=True)
+    opcoes_escolhidas = models.ManyToManyField(Opcao, blank=True)
 
     def subtotal(self):
-        return self.produto.preco * self.quantidade
+        preco_base = self.produto.preco
+        adicionais = sum(op.preco_adicional for op in self.opcoes_escolhidas.all())
+        return (preco_base + adicionais) * self.quantidade
 
     def __str__(self):
         return f"{self.quantidade}x {self.produto.nome}"
 
 
 class Pedido(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     STATUS_CHOICES = [
         ("pendente", "Pendente"),
         ("confirmado", "Confirmado"),
@@ -158,23 +188,68 @@ class Pedido(models.Model):
     usuario = models.ForeignKey(
         Usuario, on_delete=models.CASCADE, related_name="pedidos"
     )
+    numero_pedido = models.PositiveIntegerField(default=1)
     restaurante = models.ForeignKey(
         Restaurante, on_delete=models.CASCADE, related_name="pedidos"
     )
-    valor_total = models.DecimalField(max_digits=10, decimal_places=2)
+    valor_total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default="pendente")
     criado_em = models.DateTimeField(auto_now_add=True)
+    data_referencia = models.DateField()
+
+    class Meta:
+       # Isso aqui é para não repetir o mesmo número de pedido para o mesmo restaurante
+       unique_together = ('restaurante', 'numero_pedido', 'data_referencia')
 
     def __str__(self):
-        return f"Pedido #{self.id} - {self.usuario.username}"
+        return f"Pedido {self.numero_pedido:04d} - {self.restaurante.nome}"
+    
+    def save(self, *args, **kwargs):
+        if not self.data_referencia:
+            self.data_referencia = timezone.now().date()
+
+        if not self.numero_pedido:
+            with transaction.atomic():
+                ultimo_pedido = Pedido.objects.select_for_update().filter(restaurante=self.restaurante, data_referencia=self.data_referencia).order_by('-numero_pedido').first()
+                if ultimo_pedido:
+                    novo_numero = ultimo_pedido.numero_pedido + 1
+                    if novo_numero > 99999:
+                        novo_numero = 1
+                else:
+                    novo_numero = 1
+                self.numero_pedido = novo_numero
+        super().save(*args, **kwargs)
+    @property
+    def numero_formatado(self):
+        return f"{self.numero_pedido:05d}"
 
 
 class ItemPedido(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="itens")
     produto = models.ForeignKey(Produto, on_delete=models.SET_NULL, null=True)
     quantidade = models.PositiveIntegerField()
     preco_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     observacao = models.TextField(blank=True, null=True)
+    opcoes = models.JSONField(default=list)
+
+    @classmethod
+    def from_item_carrinho(cls, item_carrinho, pedido):
+        opcoes_data = [
+            {"nome": op.nome, "preco_adicional": str(op.preco_adicional)}
+            for op in item_carrinho.opcoes_escolhidas.all()
+        ]
+
+        adicionais = sum(op['preco_adicional'] for op in opcoes_data)
+
+        return cls(
+            pedido = pedido,
+            produto=item_carrinho.produto,
+            quantidade=item_carrinho.quantidade,
+            preco_unitario=item_carrinho.produto.preco + float(adicionais),
+            observacao=item_carrinho.observacao,
+            opcoes=opcoes_data
+        )
 
     def subtotal(self):
         return self.quantidade * self.preco_unitario
@@ -182,11 +257,11 @@ class ItemPedido(models.Model):
     def __str__(self):
         return f"{self.quantidade}x {self.produto.nome}"
 
-
 # -----------------------------
 # PAGAMENTO
 # -----------------------------
 class Pagamento(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     METODO_CHOICES = [
         ("pix", "Pix"),
         ("cartao_credito", "Cartão de Crédito"),
@@ -210,6 +285,7 @@ class Pagamento(models.Model):
 # ENTREGA E RASTREAMENTO
 # -----------------------------
 class Entrega(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     STATUS_CHOICES = [
         ("aguardando", "Aguardando"),
         ("retirado", "Retirado"),
@@ -234,6 +310,7 @@ class Entrega(models.Model):
 
 
 class RastreamentoEntrega(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     entrega = models.ForeignKey(
         Entrega, on_delete=models.CASCADE, related_name="rastreamentos"
     )
@@ -249,6 +326,7 @@ class RastreamentoEntrega(models.Model):
 # AVALIAÇÕES
 # -----------------------------
 class AvaliacaoRestaurante(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     restaurante = models.ForeignKey(
         Restaurante, on_delete=models.CASCADE, related_name="avaliacoes"
     )
@@ -262,6 +340,7 @@ class AvaliacaoRestaurante(models.Model):
 
 
 class AvaliacaoEntregador(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     entregador = models.ForeignKey(
         Usuario, on_delete=models.CASCADE, related_name="avaliacoes_recebidas"
     )
@@ -277,6 +356,7 @@ class AvaliacaoEntregador(models.Model):
 
 
 class AvaliacaoProduto(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     produto = models.ForeignKey(
         Produto, on_delete=models.CASCADE, related_name="avaliacoes"
     )

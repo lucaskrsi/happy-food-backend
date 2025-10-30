@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import (
-    Usuario, Restaurante, CategoriaProduto, Produto,
+    Opcao, Usuario, Restaurante, CategoriaProduto, Produto,
     Carrinho, ItemCarrinho, Pedido, ItemPedido, Pagamento,
     Entrega, RastreamentoEntrega,
     AvaliacaoRestaurante, AvaliacaoEntregador, AvaliacaoProduto
@@ -49,21 +49,29 @@ class ProdutoSerializer(serializers.ModelSerializer):
 
 class RestauranteSerializer(serializers.ModelSerializer):
     produtos = ProdutoSerializer(many=True, read_only=True)
+    dono = serializers.StringRelatedField()
 
     class Meta:
         model = Restaurante
-        fields = ['id', 'nome', 'cnpj', 'endereco', 'aberto', 'produtos']
+        fields = ['id', 'nome', 'cnpj', 'endereco', 'aberto', 'produtos', 'dono']
 
 
 # -----------------------------
 # CARRINHO E PEDIDOS
 # -----------------------------
+
+class OpcaoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Opcao
+        fields = ['id', 'nome', 'preco_adicional']
+
 class ItemCarrinhoSerializer(serializers.ModelSerializer):
     produto = ProdutoSerializer(read_only=True)
+    opcoes_escolhidas = OpcaoSerializer(many=True, read_only=True)
 
     class Meta:
         model = ItemCarrinho
-        fields = ['id', 'produto', 'quantidade', 'observacao', 'subtotal']
+        fields = ['id', 'produto', 'quantidade', 'observacao', 'opcoes_escolhidas' 'subtotal']
 
 
 class CarrinhoSerializer(serializers.ModelSerializer):
@@ -77,20 +85,22 @@ class CarrinhoSerializer(serializers.ModelSerializer):
 
 class ItemPedidoSerializer(serializers.ModelSerializer):
     produto = ProdutoSerializer(read_only=True)
+    opcoes = serializers.JSONField(read_only=True)
 
     class Meta:
         model = ItemPedido
-        fields = ['id', 'produto', 'quantidade', 'preco_unitario', 'observacao', 'subtotal']
+        fields = ['id', 'produto', 'quantidade', 'preco_unitario', 'observacao', 'opcoes', 'subtotal']
 
 
 class PedidoSerializer(serializers.ModelSerializer):
     usuario = serializers.StringRelatedField()
     restaurante = serializers.StringRelatedField()
     itens = ItemPedidoSerializer(many=True, read_only=True)
+    numero_formatado = serializers.ReadOnlyField()
 
     class Meta:
         model = Pedido
-        fields = ['id', 'usuario', 'restaurante', 'valor_total', 'status', 'criado_em', 'itens']
+        fields = ['id', 'usuario', 'restaurante', 'valor_total', 'status', 'criado_em', 'itens', 'numero_formatado']
 
 
 # -----------------------------

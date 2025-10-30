@@ -2,12 +2,13 @@ from rest_framework.views import APIView
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from .permissions import IsAdminOrReadOnly, IsRestaurante, IsEntregador
+from .permissions import IsAdminOrReadOnly, IsRestaurante, IsEntregador, IsCliente
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from google.oauth2 import id_token
 from google.auth.transport import requests
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from .models import (
     Usuario, Restaurante, CategoriaProduto, Produto,
@@ -102,10 +103,10 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     def atualizar_senha(self, request, pk=None):
         """Atualiza a senha do usuário"""
         usuario = self.get_object()
-        nova_senha = request.data.get("nova_senha")
+        nova_senha = request.data.get("password")
 
         if not nova_senha:
-            return Response({'erro': 'O campo "nova_senha" é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'erro': 'O campo "password" é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
 
         usuario.set_password(nova_senha)
         usuario.save()
@@ -149,7 +150,31 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 class RestauranteViewSet(viewsets.ModelViewSet):
     queryset = Restaurante.objects.all()
     serializer_class = RestauranteSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
+
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated or user.perfil in ('cliente', 'entregador'):
+            return Restaurante.objects.filter(aberto=True)
+        
+        if user.perfil == 'restaurante':
+            return Restaurante.objects.filter(dono=user)
+
+        if user.is_staff or user.is_superuser:
+            return Restaurante.objects.all()
+        
+        return Restaurante.objects.all()
+    
+    def get_permissions(self):
+        if self.request.method not in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsAuthenticated(), IsRestaurante()]
+        return [permissions.AllowAny(),]
+
+    def perform_create(self, serializer):
+        if not hasattr(self.request.user, 'perfil') or self.request.user.perfil != 'restaurante':
+            raise PermissionDenied("Apenas usuários com perfil 'restaurante' podem criar restaurantes.")
+        serializer.save(dono=self.request.user)
 
     @action(detail=True, methods=['get'])
     def produtos(self, request, pk=None):
@@ -167,7 +192,7 @@ class CategoriaProdutoViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         # só restaurantes (ou admin) podem criar/editar produtos
-        if self.request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        if self.request.method not in ('GET', 'HEAD', 'OPTIONS'):
             return [IsAuthenticated(), IsAdminOrReadOnly()]
         return [permissions.AllowAny(),]
 
@@ -177,7 +202,7 @@ class ProdutoViewSet(viewsets.ModelViewSet):
     serializer_class = ProdutoSerializer
     def get_permissions(self):
         # só restaurantes (ou admin) podem criar/editar produtos
-        if self.request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        if self.request.method not in ('GET', 'HEAD', 'OPTIONS'):
             return [IsAuthenticated(), IsRestaurante()]
         return [permissions.AllowAny(),]
 
@@ -188,7 +213,33 @@ class ProdutoViewSet(viewsets.ModelViewSet):
 class CarrinhoViewSet(viewsets.ModelViewSet):
     queryset = Carrinho.objects.all()
     serializer_class = CarrinhoSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsCliente]
+
+    @action(detail=True, methods=['post'])
+    def finalizar(self, request, pk=None):
+        carrinho = self.get_object()
+        itens_do_carrinho = carrinho.itens.all()
+        if not itens_do_carrinho.exists():
+            return Response({'erro': 'Carrinho vazio.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        restaurante = itens_do_carrinho.first().produto.restaurante
+
+        try:
+            with transaction.atomic():
+                pedido = Pedido.objects.create(usuario=carrinho.usuario, restaurante=restaurante)
+                for item_carrinho in itens_do_carrinho:
+                    item_pedido = ItemPedido.from_item_carrinho(item_carrinho, pedido)
+                    item_pedido.save()
+
+                pedido.valor_total = sum(i.subtotal() for i in pedido.itens.all())
+                pedido.save()
+
+                pedido = finalizar_carrinho(carrinho)
+                carrinho.itens.all().delete()
+            serializer = PedidoSerializer(pedido)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({"erro": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def adicionar_item(self, request, pk=None):
