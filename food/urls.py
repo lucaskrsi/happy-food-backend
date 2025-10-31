@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import GoogleLoginView
+from .views import GoogleLoginView, GrupoOpcaoViewSet
 
 from .views import (
     UsuarioViewSet, RestauranteViewSet, CategoriaProdutoViewSet, ProdutoViewSet,
@@ -14,6 +14,7 @@ router.register(r'usuarios', UsuarioViewSet)
 router.register(r'restaurantes', RestauranteViewSet)
 router.register(r'categorias', CategoriaProdutoViewSet)
 router.register(r'produtos', ProdutoViewSet)
+router.register(r'grupos-opcoes', GrupoOpcaoViewSet)
 router.register(r'carrinhos', CarrinhoViewSet)
 router.register(r'pedidos', PedidoViewSet)
 router.register(r'pagamentos', PagamentoViewSet)

@@ -129,16 +129,24 @@ class Produto(models.Model):
 # -----------------------------
 
 class GrupoOpcao(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     produto = models.ForeignKey(Produto, on_delete=models.CASCADE, related_name='grupos_opcoes')
     nome = models.CharField(max_length=100)
     obrigatorio = models.BooleanField(default=False)
     multipla_escolha = models.BooleanField(default=False)
 
+    def __str__(self):
+        return self.nome
+
 
 class Opcao(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     grupo = models.ForeignKey(GrupoOpcao, on_delete=models.CASCADE, related_name='opcoes')
     nome = models.CharField(max_length=100)
     preco_adicional = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+
+    def __str__(self):
+        return self.nome
 
 
 # -----------------------------
@@ -149,7 +157,14 @@ class Carrinho(models.Model):
     usuario = models.ForeignKey(
         Usuario, on_delete=models.CASCADE, related_name="carrinhos"
     )
+    restaurante = models.ForeignKey(
+        Restaurante, on_delete=models.CASCADE, related_name="carrinhos",
+        blank=True, null=True
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('usuario', 'restaurante')
 
     def __str__(self):
         return f"Carrinho de {self.usuario.username}"
@@ -164,6 +179,15 @@ class ItemCarrinho(models.Model):
     quantidade = models.PositiveIntegerField(default=1)
     observacao = models.TextField(blank=True, null=True)
     opcoes_escolhidas = models.ManyToManyField(Opcao, blank=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        for grupo in {op.grupo for op in self.opcoes_escolhidas.all()}:
+            opcoes_no_grupo = self.opcoes_escolhidas.filter(grupo=grupo)
+            if not grupo.multipla_escolha and opcoes_no_grupo.count() > 1:
+                raise ValueError(f"O grupo de opções '{grupo.nome}' não permite múltiplas escolhas.")
+            if grupo.obrigatorio and opcoes_no_grupo.count() == 0:
+                raise ValueError(f"O grupo de opções '{grupo.nome}' é obrigatório.")
 
     def subtotal(self):
         preco_base = self.produto.preco
@@ -196,6 +220,8 @@ class Pedido(models.Model):
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default="pendente")
     criado_em = models.DateTimeField(auto_now_add=True)
     data_referencia = models.DateField()
+    endereco_entrega = models.TextField(blank=True, null=True)
+    endereco_origem = models.TextField(blank=True, null=True)
 
     class Meta:
        # Isso aqui é para não repetir o mesmo número de pedido para o mesmo restaurante
@@ -367,3 +393,39 @@ class AvaliacaoProduto(models.Model):
 
     def __str__(self):
         return f"{self.produto.nome} - {self.nota}/5"
+
+class Endereco(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    usuario = models.ForeignKey(
+        Usuario, on_delete=models.CASCADE, related_name="enderecos"
+    )
+    restaurante = models.OneToOneField(
+        Restaurante, on_delete=models.CASCADE, related_name="enderecos", null=True, blank=True
+    )
+    apelido = models.CharField(max_length=50, blank=True, null=True)
+    tipo = models.CharField(max_length=50, blank=True, null=True)
+    rua = models.CharField(max_length=255)
+    numero = models.CharField(max_length=20)
+    complemento = models.CharField(max_length=255, blank=True, null=True)
+    bairro = models.CharField(max_length=100)
+    cidade = models.CharField(max_length=100)
+    estado = models.CharField(max_length=100)
+    cep = models.CharField(max_length=20)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    def gerar_snapshot(self, formato="texto"):
+        if formato == "json":
+            return {
+                "rua": self.rua,
+                "numero": self.numero,
+                "bairro": self.bairro,
+                "cidade": self.cidade,
+                "estado": self.estado,
+                "cep": self.cep,
+            }
+        return f"{self.rua}, {self.numero} - {self.bairro}, {self.cidade}/{self.estado} - CEP {self.cep}"
+
+
+
+    def __str__(self):
+        return f"[{self.apelido}] ({self.cep}) {self.rua}, {self.numero} - {self.cidade}/{self.estado}"

@@ -11,13 +11,13 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from .models import (
-    Usuario, Restaurante, CategoriaProduto, Produto,
+    Endereco, GrupoOpcao, Opcao, Usuario, Restaurante, CategoriaProduto, Produto,
     Carrinho, ItemCarrinho, Pedido, ItemPedido, Pagamento,
     Entrega, RastreamentoEntrega,
     AvaliacaoRestaurante, AvaliacaoEntregador, AvaliacaoProduto
 )
 from .serializers import (
-    UsuarioSerializer, RestauranteSerializer,
+    EnderecoSerializer, GrupoOpcaoSerializer, OpcaoSerializer, UsuarioSerializer, RestauranteSerializer,
     CategoriaProdutoSerializer, ProdutoSerializer,
     CarrinhoSerializer, ItemCarrinhoSerializer,
     PedidoSerializer, ItemPedidoSerializer, PagamentoSerializer,
@@ -205,6 +205,43 @@ class ProdutoViewSet(viewsets.ModelViewSet):
         if self.request.method not in ('GET', 'HEAD', 'OPTIONS'):
             return [IsAuthenticated(), IsRestaurante()]
         return [permissions.AllowAny(),]
+    
+    @action(detail=True, methods=['get'], url_path='grupos-opcoes', url_name='grupos_opcoes')
+    def grupos_opcoes(self, request, pk=None):
+        """Listar grupos de opções de um produto específico"""
+        produto = self.get_object()
+        grupos = produto.grupos_opcoes.all()
+        serializer = GrupoOpcaoSerializer(grupos, many=True)
+        return Response(serializer.data)
+
+class GrupoOpcaoViewSet(viewsets.ModelViewSet):
+    queryset = GrupoOpcao.objects.all()
+    serializer_class = GrupoOpcaoSerializer
+    permission_classes = [permissions.IsAuthenticated, IsRestaurante]
+
+    @action(detail=True, methods=['get'])
+    def opcoes(self, request, pk=None):
+        """Listar opções de um grupo de opções específico"""
+        grupo = self.get_object()
+        opcoes = grupo.opcoes.all()
+        serializer = OpcaoSerializer(opcoes, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], url_path='adicionar', url_name='adicionar')
+    def adicionar_opcao(self, request, pk=None):
+        """Adicionar uma opção a um grupo de opções"""
+        grupo = self.get_object()
+        nome = request.data.get('nome')
+        preco_adicional = request.data.get('preco_adicional', 0)
+
+        if not nome:
+            return Response({'erro': 'O campo "nome" é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        opcao = Opcao.objects.create(grupo=grupo, nome=nome, preco_adicional=preco_adicional)
+        # grupo.opcoes.add(opcao)
+        # grupo.save()
+
+        return Response(OpcaoSerializer(opcao).data, status=status.HTTP_201_CREATED)
 
 
 # -----------------------------
@@ -224,9 +261,28 @@ class CarrinhoViewSet(viewsets.ModelViewSet):
         
         restaurante = itens_do_carrinho.first().produto.restaurante
 
+        #Endereço
+        endereco_id = request.data.get('endereco_id')
+        if not endereco_id:
+            return Response({'erro': 'É necessário informar o endereço_id.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        endereco_cliente = get_object_or_404(Endereco, id=endereco_id, usuario=request.user)
+
+        endereco_entrega = endereco_cliente.gerar_snapshot()
+        
+        if restaurante.enderecos.exists():
+            endereco_origem = restaurante.enderecos.gerar_snapshot()
+        else:
+            endereco_origem = "Endereço do restaurante não cadastrado."
+
         try:
             with transaction.atomic():
-                pedido = Pedido.objects.create(usuario=carrinho.usuario, restaurante=restaurante)
+                pedido = Pedido.objects.create(
+                    usuario=carrinho.usuario,
+                    restaurante=restaurante,
+                    endereco_entrega=endereco_entrega,
+                    endereco_origem=endereco_origem
+                )
                 for item_carrinho in itens_do_carrinho:
                     item_pedido = ItemPedido.from_item_carrinho(item_carrinho, pedido)
                     item_pedido.save()
@@ -272,7 +328,7 @@ class CarrinhoViewSet(viewsets.ModelViewSet):
 class PedidoViewSet(viewsets.ModelViewSet):
     queryset = Pedido.objects.all()
     serializer_class = PedidoSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsCliente]
 
     @action(detail=True, methods=['post'])
     def alterar_status(self, request, pk=None):
@@ -345,3 +401,54 @@ class AvaliacaoProdutoViewSet(viewsets.ModelViewSet):
     queryset = AvaliacaoProduto.objects.all()
     serializer_class = AvaliacaoProdutoSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+class EnderecoViewSet(viewsets.ModelViewSet):
+    queryset = Endereco.objects.all()
+    serializer_class = EnderecoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return Endereco.objects.all()
+        return Endereco.objects.filter(usuario=user)
+    
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user)
+
+    @action(detail=True, methods=['post'], url_path='vincular-restaurante', url_name='vincular-restaurante')
+    def vincular_restaurante(self, request, pk=None):
+        """Vincula um endereço a um restaurante"""
+        endereco = self.get_object()
+        restaurante_id = request.data.get('restaurante_id')
+
+        try:
+            restaurante = Restaurante.objects.get(id=restaurante_id)
+        except Restaurante.DoesNotExist:
+            return Response({'erro': 'Restaurante não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        endereco.restaurante = restaurante
+        endereco.save()
+        return Response(EnderecoSerializer(endereco).data)
+    
+    @action(detail=True, methods=['delete'], url_path='desvincular-restaurante', url_name='desvincular-restaurante')
+    def desvincular_restaurante(self, request, pk=None):
+        """Desvincula um endereço de um restaurante"""
+        endereco = self.get_object()
+        endereco.restaurante = None
+        endereco.save()
+        return Response(EnderecoSerializer(endereco).data)
+
+    @action(detail=False, methods=['get'], url_path='enderecos-restaurante', url_name='enderecos-restaurante')
+    def enderecos_restaurante(self, request):
+        """Lista endereços vinculados a um restaurante específico"""
+        restaurante_id = request.query_params.get('restaurante_id')
+
+        try:
+            restaurante = Restaurante.objects.get(id=restaurante_id)
+        except Restaurante.DoesNotExist:
+            return Response({'erro': 'Restaurante não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        enderecos = Endereco.objects.filter(restaurante=restaurante)
+        serializer = EnderecoSerializer(enderecos, many=True)
+        return Response(serializer.data)

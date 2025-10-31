@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='GrupoOpcao',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
                 ('nome', models.CharField(max_length=100)),
                 ('obrigatorio', models.BooleanField(default=False)),
                 ('multipla_escolha', models.BooleanField(default=False)),
@@ -88,7 +88,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Opcao',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
                 ('nome', models.CharField(max_length=100)),
                 ('preco_adicional', models.DecimalField(decimal_places=2, default=0.0, max_digits=8)),
                 ('grupo', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='opcoes', to='food.grupoopcao')),
